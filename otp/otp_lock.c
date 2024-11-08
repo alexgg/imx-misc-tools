@@ -23,10 +23,14 @@ static unsigned int lock_offsets[] = {
 	[OTP_LOCK_SJC_RESP] = 10,
 	[OTP_LOCK_USB_ID] = 12,
 	[OTP_LOCK_MAC_ADDR] = 14,
+#ifdef IMX8MM
 	[OTP_LOCK_MANUFACTURE_KEY] = 16,
+#endif
 	[OTP_LOCK_GP1] = 20,
 	[OTP_LOCK_GP2] = 22,
+#ifdef IMX8MM
 	[OTP_LOCK_GP5] = 24,
+#endif
 };
 
 #define OTP_LOCK_1BIT(name_) [OTP_LOCK_##name_] = true,

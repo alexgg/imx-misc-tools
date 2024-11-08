@@ -39,7 +39,9 @@ static const unsigned int bootcfg_offset[] = {
 	[OTP_BOOT_CFG_BT_FUSE_SEL]  = 28,
 	// BOOT_CFG1
 	[OTP_BOOT_CFG_WDOG_ENABLE]  = 10,
+#ifdef IMX8MM
 	[OTP_BOOT_CFG_TZASC_ENABLE] = 11,
+#endif
 	[OTP_BOOT_CFG_WDOG_TIMEOUT] = 16,
 };
 

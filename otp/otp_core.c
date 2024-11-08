@@ -21,10 +21,15 @@ struct otpctx_s {
 	int fd;
 };
 
+/* (bank * bankSize + word) * wordSize */
+/* for both i.MX8MM and i.MX8MP bankSize == 4, wordSize == 4  */
 static off_t fuseword_offsets[] = {
 	[OCOTP_LOCK]		= 0x0,
 	[OCOTP_TESTER0]		= 0x4,
 	[OCOTP_TESTER1]		= 0x8,
+#ifdef IMX8MP
+	[OCOTP_TESTER2]		= 0xC,
+#endif
 	[OCOTP_TESTER3]		= 0x10,
 	[OCOTP_TESTER4]		= 0x14,
 	[OCOTP_TESTER5]		= 0x18,
@@ -77,7 +82,11 @@ is_compatible (void)
 		return false;
 	// Change terminating \n to \0
 	socid[n-1] = '\0';
+#ifdef IMX8MM
 	return strcmp(socid, "i.MX8MM") == 0;
+#elif IMX8MP
+	return strcmp(socid, "i.MX8MP") == 0;
+#endif
 
 } /* is_compatible */
 

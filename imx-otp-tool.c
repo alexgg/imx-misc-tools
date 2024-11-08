@@ -114,7 +114,9 @@ do_show (otpctx_t ctx, int argc, char * const argv[])
 		{ OTP_BOOT_CFG_DIR_BT_DIS,  "NXP reserved modes disabled:" },
 		{ OTP_BOOT_CFG_BT_FUSE_SEL, "Boot from fuses enabled:" },
 		{ OTP_BOOT_CFG_WDOG_ENABLE, "Watchdog enabled:" },
+#ifdef IMX8MM
 		{ OTP_BOOT_CFG_TZASC_ENABLE,"TZASC enabled:" },
+#endif
 	};
 	static const char *lstate_label[OTP_LOCKSTATE_COUNT] = {
 		[OTP_LOCKSTATE_UNLOCKED] = "unlocked",

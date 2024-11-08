@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 #undef OTP_LOCK_2BIT
+#ifdef IMX8MM
 #define OTP_LOCKS_2BIT \
 	OTP_LOCK_2BIT(TESTER) \
 	OTP_LOCK_2BIT(BOOT_CFG) \
@@ -19,11 +20,31 @@
 	OTP_LOCK_2BIT(GP1) \
 	OTP_LOCK_2BIT(GP2) \
 	OTP_LOCK_2BIT(GP5)
+#elif defined(IMX8MP)
+#define OTP_LOCKS_2BIT \
+	OTP_LOCK_2BIT(TESTER) \
+	OTP_LOCK_2BIT(BOOT_CFG) \
+	OTP_LOCK_2BIT(USB_ID) \
+	OTP_LOCK_2BIT(MAC_ADDR) \
+	OTP_LOCK_2BIT(GP1) \
+	OTP_LOCK_2BIT(GP2)
+#else
+#define OTP_LOCKS_2BIT
+#endif
+
 #undef OTP_LOCK_1BIT
+#ifdef IMX8MP
+#define OTP_LOCKS_1BIT \
+	OTP_LOCK_1BIT(SRK) \
+	OTP_LOCK_1BIT(SJC_RESP)
+#elif defined(IMX8MM)
 #define OTP_LOCKS_1BIT \
 	OTP_LOCK_1BIT(SRK) \
 	OTP_LOCK_1BIT(SJC_RESP) \
 	OTP_LOCK_1BIT(MANUFACTURE_KEY)
+#else
+#error"No platform defined"
+#endif
 
 #define OTP_LOCK_2BIT(name_) OTP_LOCK_##name_,
 #define OTP_LOCK_1BIT(name_) OTP_LOCK_##name_,
