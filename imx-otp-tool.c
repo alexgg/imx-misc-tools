@@ -28,6 +28,8 @@ static bool     have_srk_hash = false;
 static uint32_t null_hash[8] = { 0 };
 static char *progname;
 static bool opt_quiet = false;
+static bool jtag_enable = false;
+static bool debug_mode = false;
 
 typedef int (*option_routine_t)(otpctx_t ctx, int argc, char * const argv[]);
 static int do_check_secure(otpctx_t ctx, int argc, char * const argv[]);
@@ -47,6 +49,8 @@ static struct {
 static struct option options[] = {
 	{ "device",		required_argument,	0, 'd' },
 	{ "fuse-file",		required_argument,	0, 'f' },
+	{ "jtag-enable",	required_argument,	0, 'j' },
+	{ "debug-mode",		required_argument,	0, 'm' },
 	{ "help",		no_argument,		0, 'h' },
 	{ "quiet",		no_argument,		0, 'q' },
 	{ 0,			0,			0, 0   }
@@ -56,6 +60,8 @@ static const char *shortopts = ":d:f:chq";
 static char *optarghelp[] = {
 	"--device             ",
 	"--fuse-file          ",
+	"--jtag-enable        ",
+	"--debug-mode         ",
 	"--help               ",
 	"--quiet              ",
 };
@@ -63,6 +69,8 @@ static char *optarghelp[] = {
 static char *opthelp[] = {
 	"path to the OCOTP nvmem device",
 	"path to the SRK_1_2_3_4_fuse.bin file",
+	"skip JTAG disable on secure command",
+	"skip debug mode disable on secure command",
 	"display this help text",
 	"omit prompts and information displays",
 };
@@ -88,6 +96,29 @@ print_usage (void)
 
 } /* print_usage */
 
+static char * bootcfg_get_jtag_smode(uint32_t * bootcfg, char * msg, size_t msglen) {
+	uint8_t val = 0;
+	if (otp_bootcfg_twobit_get(bootcfg, OTP_BOOTCFG_WORD_COUNT,
+				 OTP_BOOT_CFG_JTAG_SMODE, &val)) {
+		switch (val) {
+			case 0:
+				snprintf(msg, msglen, "JTAG enabled");
+				break
+			case 1:
+				snprintf(msg, msglen, "secure JTAG enabled");
+				break
+			case 3:
+				snprintf(msg, msglen, "Debug mode disabled");
+				break
+			default:
+				snprintf(msg, msglen, "ERROR: Unknown mode %d", val);
+				break
+		}
+	} else {
+		snprintf(msg, msglen, "ERROR: Failed to read JTAG_SMODE");
+	}
+	return msg;
+}
 
 /*
  * do_show
@@ -110,7 +141,9 @@ do_show (otpctx_t ctx, int argc, char * const argv[])
 		const char *label;
 	} bootcfg_fuses[] = {
 		{ OTP_BOOT_CFG_SJC_DISABLE, "JTAG disabled:" },
+		{ OTP_BOOT_CFG_JTAG_SMODE,  "Debug mode disabled:" },
 		{ OTP_BOOT_CFG_SEC_CONFIG,  "Secure config closed:" },
+		{ OTP_BOOT_CFG_JTAG_HEO,    "HAB JTAG override disabled:" },
 		{ OTP_BOOT_CFG_DIR_BT_DIS,  "NXP reserved modes disabled:" },
 		{ OTP_BOOT_CFG_BT_FUSE_SEL, "Boot from fuses enabled:" },
 		{ OTP_BOOT_CFG_WDOG_ENABLE, "Watchdog enabled:" },
@@ -171,6 +204,10 @@ do_show (otpctx_t ctx, int argc, char * const argv[])
 			return 1;
 		}
 		printf("%-32.32s %s\n", bootcfg_fuses[i].label, (val ? "YES" : "NO"));
+		if (i == OTP_BOOT_CFG_JTAG_SMODE) {
+			char msg[64];
+			printf("%s: %s\n", bootcfg_fuses[i].label, bootcfg_get_jtag_smode(bootcfg, msg, sizeof(msg)));
+		}
 		if (i == OTP_BOOT_CFG_WDOG_ENABLE)
 			printf("%-32.32s %u sec\n", "Watchdog timeout:", wd_timeout);
 	}
@@ -185,6 +222,61 @@ do_show (otpctx_t ctx, int argc, char * const argv[])
 
 } /* do_show */
 
+static int onebit_bootcfg_update(unit32_t * bootcfg, uint32_t reg, const char * label) {
+	bool val;
+	if (otp_bootcfg_bool_get(bootcfg, OTP_BOOTCFG_WORD_COUNT,
+				 reg, &val) < 0) {
+		perror("otp_bootcfg_bool_get");
+		return 1;
+	}
+	if (val) {
+		if (!opt_quiet)
+			printf("%s fuse already programmed.\n", label);
+	} else {
+		if (!opt_quiet)
+			printf("Programming %s fuse.\n", label);
+		if (otp_bootcfg_bool_set(bootcfg, OTP_BOOTCFG_WORD_COUNT,
+					 reg, true) < 0) {
+			perror("otp_bootcfg_bool_set");
+			return 1;
+		}
+		if (otp_bootcfg_update(ctx, bootcfg, OTP_BOOTCFG_WORD_COUNT) < 0) {
+			perror("otp_bootcfg_update");
+			return 1;
+		}
+		if (!opt_quiet)
+			printf("%s fuse programmed.\n", label);
+	}
+	return 0;
+}
+
+static int twobit_bootcfg_update(unit32_t * bootcfg, uint32_t offset, const char * label) {
+	unit8_t val;
+	if (otp_bootcfg_twobit_get(bootcfg, OTP_BOOTCFG_WORD_COUNT,
+				 offset, &val) < 0) {
+		perror("otp_bootcfg_twobit_get");
+		return 1;
+	}
+	if (val != 0) {
+		if (!opt_quiet)
+			printf("%s fuses already programmed.\n", label);
+	} else {
+		if (!opt_quiet)
+			printf("Programming %s fuses.\n", label);
+		if (otp_bootcfg_twobit_set(bootcfg, OTP_BOOTCFG_WORD_COUNT,
+					 offset, true) < 0) {
+			perror("otp_bootcfg_twobit_set");
+			return 1;
+		}
+		if (otp_bootcfg_update(ctx, bootcfg, OTP_BOOTCFG_WORD_COUNT) < 0) {
+			perror("otp_bootcfg_update");
+			return 1;
+		}
+		if (!opt_quiet)
+			printf("%s fuses programmed.\n", label);
+	}
+	return 0;
+}
 
 /*
  * do_secure
@@ -265,23 +357,17 @@ do_secure (otpctx_t ctx, int argc, char * const argv[])
 		perror("otp_bootcfg_bool_get");
 		return 1;
 	}
-	if (val) {
-		if (!opt_quiet)
-			printf("SEC_CONFIG fuse already programmed.\n");
-	} else {
-		if (!opt_quiet)
-			printf("Programming SEC_CONFIG fuse.\n");
-		if (otp_bootcfg_bool_set(bootcfg, OTP_BOOTCFG_WORD_COUNT,
-					 OTP_BOOT_CFG_SEC_CONFIG, true) < 0) {
-			perror("otp_bootcfg_bool_set");
+	if ( ! onebit_bootcfg_update(bootcfg, OTP_BOOT_CFG_SEC_CONFIG, "SEC_CONFIG") )
+		return 1;
+	if (!jtag_enable) {
+		if ( ! onebit_bootcfg_update(bootcfg, OTP_BOOT_CFG_SJC_DISABLE, "SJC_DISABLE"))
 			return 1;
-		}
-		if (otp_bootcfg_update(ctx, bootcfg, OTP_BOOTCFG_WORD_COUNT) < 0) {
-			perror("otp_bootcfg_update");
+		if ( ! onebit_bootcfg_update(bootcfg, OTP_BOOT_CFG_JTAG_HEO, "JTAG_HEO"))
 			return 1;
-		}
-		if (!opt_quiet)
-			printf("SEC_CONFIG fuse programmed.\n");
+	}
+	if (!debug_mode) {
+		if ( ! twobit_bootcfg_update(bootcfg, OTP_BOOT_CFG_JTAG_SMODE, "JTAG_SMODE"))
+			return 1;
 	}
 
 	return 0;
@@ -346,6 +432,12 @@ main (int argc, char * const argv[])
 			break;
 		case 'f':
 			fuse_file = optarg;
+			break;
+		case 'j':
+			jtag_enable = true;
+			break;
+		case 'm':
+			debug_mode = true;
 			break;
 		case 'q':
 			opt_quiet = true;

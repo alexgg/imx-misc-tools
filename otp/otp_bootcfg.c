@@ -34,7 +34,9 @@ static const int bootcfg_fuseword_index[] = {
 static const unsigned int bootcfg_offset[] = {
 	// BOOT_CFG0
 	[OTP_BOOT_CFG_SJC_DISABLE]  = 21,
+	[OTP_BOOT_CFG_JTAG_SMODE]   = 22,
 	[OTP_BOOT_CFG_SEC_CONFIG]   = 25,
+	[OTP_BOOT_CFG_JTAG_HEO]     = 26,
 	[OTP_BOOT_CFG_DIR_BT_DIS]   = 27,
 	[OTP_BOOT_CFG_BT_FUSE_SEL]  = 28,
 	// BOOT_CFG1
@@ -130,6 +132,28 @@ otp_bootcfg_bool_get (uint32_t *fusewords, size_t sizeinwords,
 
 } /* otp_bootcfg_bool_get */
 
+/*
+ * otp_bootcfg_twobit_get
+ *
+ * Extracts the setting of a 2-bit fuse in the
+ * BOOT_CFGx fuses.
+ */
+int
+otp_bootcfg_twobit_get (uint32_t *fusewords, size_t sizeinwords,
+		      otp_boot_cfg_id_t id, uint8_t *value)
+{
+	// XXX - magic 2 here because we're only working with
+	//       BOOT_CFG0 and 1 - XXX
+	if (fusewords == NULL || value == NULL ||
+	    sizeinwords < 2 || id >= OTP_BOOT_CFG_COUNT) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	*value = (fusewords[bootcfg_fuseword_index[id]] & (3U << bootcfg_offset[id])) >> bootcfg_offset[id];
+	return 0;
+
+} /* otp_bootcfg_bool_get */
 
 /*
  * otp_bootcfg_wdog_get
@@ -183,6 +207,34 @@ otp_bootcfg_bool_set (uint32_t *fusewords, size_t sizeinwords,
 	return 0;
 
 } /* otp_bootcfg_bool_set */
+
+/*
+ * otp_bootcfg_twobit_set
+ *
+ * Sets/clears a 2-bit BOOT_CFGx fuse bit in the fusewords array.
+ */
+int
+otp_bootcfg_twobit_set (uint32_t *fusewords, size_t sizeinwords,
+		      otp_boot_cfg_id_t id, uint8_t value)
+{
+	// XXX - magic 2 here because we're only working with
+	//       BOOT_CFG0 and 1 - XXX
+	if (fusewords == NULL || sizeinwords < 2U || id >= OTP_BOOT_CFG_COUNT) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (value > 3) {
+		errno = EINVAL;
+		return -1;
+	}
+	if (value > 0)
+		fusewords[bootcfg_fuseword_index[id]] |= 3U << bootcfg_offset[id];
+	else
+		fusewords[bootcfg_fuseword_index[id]] &= ~(3U << bootcfg_offset[id]);
+	return 0;
+
+} /* otp_bootcfg_twobit_set */
 
 /*
  * otp_bootcfg_wdog_set
